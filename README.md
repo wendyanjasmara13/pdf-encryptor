@@ -5,7 +5,8 @@ PDF Encryptor is a lightweight desktop application built with Python that allows
 
 ##  Quick Demo
 
-![PDF Encryptor Demo Screenshot](./screenshots/screenshot.png)
+![PDF Encryptor Demo Screenshot](<img width="938" height="528" alt="Screenshot 2025-08-16 141246" src="https://github.com/user-attachments/assets/ffa73d29-6d79-4a8c-a1bb-e71de8aca1df" />)
+
 
 *Replace `screenshots/screenshot.png` with your actual app screenshot.*
 
@@ -37,8 +38,8 @@ PDF Encryptor is a lightweight desktop application built with Python that allows
 ### A. Download & Run (Windows executable)
 
 1. Navigate to the [**Releases** page](https://github.com/wendyanjasmara13/pdf-encryptor/releases/latest).  
-2. Download the `PDF-Encryptor-v1.0.zip`.  
-3. Extract and run `PDF-Encryptor.exe`.  
+2. Download the `PDF.Encrypt.v1.0.0.7z`.  
+3. Extract and run `PDF Encrypt v1.0.0exe`.  
 4. Follow the steps:
    - Select your Excel file with `filename` and `password` columns  
    - Select the PDF files to encrypt  
