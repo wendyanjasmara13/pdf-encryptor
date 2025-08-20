@@ -54,8 +54,9 @@ PDF Encryptor is a lightweight desktop application built with Python that allows
 ## License & Support
 
 - License: MIT License — freely use, modify, and distribute (see LICENSE).
-- Donations (optional, but appreciated): https://saweria.co/siapahayoo13
-
+- Donations (optional, but appreciated):
+- Saweria: https://saweria.co/siapahayoo13
+- Paypal: https://paypal.me/wendyanjasmara
 ---
 
 ## ​ How to Use
