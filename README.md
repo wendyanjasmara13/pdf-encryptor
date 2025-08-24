@@ -45,7 +45,6 @@ PDF Encryptor is a lightweight desktop application built with Python that allows
 - **Batch processing** — encrypt multiple PDFs in one go  
 - Import passwords from an Excel file (`filename` + `password` columns)  
 - Select a custom output folder  
-- Encrypted files automatically receive `_encrypted` suffix  
 - Confirmation screen previews files and passwords before encryption  
 - Password log ensures easy verification and accountability
 
