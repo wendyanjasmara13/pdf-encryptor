@@ -1,8 +1,10 @@
 import os
+import webbrowser
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import pandas as pd
 import pikepdf
+
 
 # ---------- Helpers ----------
 
@@ -13,12 +15,13 @@ def truncate_ellipsis(text: str, width: int) -> str:
         return s[:max(0, width - 1)] + "…"
     return s.ljust(width)
 
+
 def build_preview_table(rows):
     """
     rows: list of tuples (index, filename, password)
     Returns a nicely formatted fixed-width ASCII table (single-line per row).
     """
-    # Fixed column widths (tweak as you like)
+    # Fixed column widths
     w_no, w_file, w_pwd = 4, 52, 28
 
     def sep():
@@ -38,6 +41,7 @@ def build_preview_table(rows):
 
     return header + body + sep()
 
+
 def encrypt_pdf(input_pdf: str, output_pdf: str, password: str) -> tuple[bool, str | None]:
     """Encrypt one PDF. Returns (success, error_message). AES-256 by default (pikepdf)."""
     try:
@@ -47,12 +51,12 @@ def encrypt_pdf(input_pdf: str, output_pdf: str, password: str) -> tuple[bool, s
                 encryption=pikepdf.Encryption(
                     user=str(password),
                     owner=str(password)
-                    # No 'R' param => pikepdf uses strongest available (AES-256)
                 )
             )
         return True, None
     except Exception as e:
         return False, str(e)
+
 
 # ---------- Main workflow ----------
 
@@ -69,7 +73,6 @@ def main():
         messagebox.showinfo("Cancelled", "No Excel file selected.")
         return
 
-    # Read Excel and validate columns
     try:
         df = pd.read_excel(excel_path)
     except Exception as e:
@@ -109,14 +112,17 @@ def main():
         preview_rows.append((idx, fname, pwd))
         pairs.append((pdf_path, pwd))
 
-    # Show confirmation window (Toplevel) with scrollbars, monospace table
-    confirm = {"proceed": False}
+    # Confirmation window
+    confirm = {
+        "proceed": False,
+        "overwrite": tk.BooleanVar(value=False),
+        "add_suffix": tk.BooleanVar(value=True),  # NEW: control "_encrypted" suffix
+    }
 
     top = tk.Toplevel(root)
     top.title("Confirm Encryption List")
-    top.geometry("900x500")  # wider by default
+    top.geometry("900x600")
 
-    # Header info
     header_text = (
         f"Output folder: {output_folder}\n"
         f"Excel: {os.path.basename(excel_path)}\n"
@@ -140,9 +146,27 @@ def main():
     yscroll.pack(side="right", fill="y")
     xscroll.pack(side="bottom", fill="x")
 
+    # Options row
+    options_frame = tk.Frame(top)
+    options_frame.pack(pady=(4, 0))
+
+    overwrite_chk = tk.Checkbutton(
+        options_frame,
+        text="Replace original files (instead of saving to the output folder with a new name)",
+        variable=confirm["overwrite"]
+    )
+    overwrite_chk.grid(row=0, column=0, sticky="w", padx=4, pady=2)
+
+    suffix_chk = tk.Checkbutton(
+        options_frame,
+        text='Add "_encrypted" to filename (applies only when not replacing originals)',
+        variable=confirm["add_suffix"]
+    )
+    suffix_chk.grid(row=1, column=0, sticky="w", padx=4, pady=2)
+
     # Buttons
     btn_frame = tk.Frame(top)
-    btn_frame.pack(pady=6)
+    btn_frame.pack(pady=8)
     def on_proceed():
         confirm["proceed"] = True
         top.destroy()
@@ -151,10 +175,7 @@ def main():
     tk.Button(btn_frame, text="Proceed", width=12, command=on_proceed).pack(side="left", padx=6)
     tk.Button(btn_frame, text="Cancel",  width=12, command=on_cancel).pack(side="left", padx=6)
 
-    # Make closing the window equal to cancel
     top.protocol("WM_DELETE_WINDOW", on_cancel)
-
-    # Wait until window is closed (no second Tk mainloop)
     top.grab_set()
     root.wait_window(top)
 
@@ -162,29 +183,49 @@ def main():
         messagebox.showinfo("Cancelled", "Operation cancelled.")
         return
 
-    # Step 4: Encrypt
+    # Step 4: Encrypt with progress bar
+    progress_win = tk.Toplevel(root)
+    progress_win.title("Encrypting PDFs")
+    tk.Label(progress_win, text="Encrypting files, please wait...").pack(pady=10)
+    progress = ttk.Progressbar(progress_win, orient="horizontal", length=420, mode="determinate")
+    progress.pack(padx=20, pady=10)
+    progress["maximum"] = len(pairs)
+    progress_win.update_idletasks()
+
     log_lines = []
     success_count = 0
     skipped_count = 0
     error_count = 0
 
-    for pdf_path, pwd in pairs:
+    for i, (pdf_path, pwd) in enumerate(pairs, start=1):
         fname = os.path.basename(pdf_path)
         base, ext = os.path.splitext(fname)
-        output_pdf = os.path.join(output_folder, f"{base}_encrypted{ext}")
+
+        if confirm["overwrite"].get():
+            # Replace original filename (in the chosen output folder)
+            output_pdf = os.path.join(output_folder, fname)
+        else:
+            if confirm["add_suffix"].get():
+                output_pdf = os.path.join(output_folder, f"{base}_encrypted{ext}")
+            else:
+                output_pdf = os.path.join(output_folder, f"{base}{ext}")
 
         if pwd == "(NOT FOUND)":
             log_lines.append(f"{fname}\t(NOT FOUND)")
             skipped_count += 1
-            continue
-
-        ok, err = encrypt_pdf(pdf_path, output_pdf, pwd)
-        if ok:
-            log_lines.append(f"{os.path.basename(output_pdf)}\t{pwd}")
-            success_count += 1
         else:
-            log_lines.append(f"{fname}\tERROR: {err}")
-            error_count += 1
+            ok, err = encrypt_pdf(pdf_path, output_pdf, pwd)
+            if ok:
+                log_lines.append(f"{os.path.basename(output_pdf)}\t{pwd}")
+                success_count += 1
+            else:
+                log_lines.append(f"{fname}\tERROR: {err}")
+                error_count += 1
+
+        progress["value"] = i
+        progress_win.update_idletasks()
+
+    progress_win.destroy()
 
     # Step 5: Write password list
     log_path = os.path.join(output_folder, "password_list.txt")
@@ -196,15 +237,52 @@ def main():
         messagebox.showerror("Error", f"Failed to write password_list.txt:\n{e}")
         return
 
-    messagebox.showinfo(
-        "Done",
+    # Final results + Donation window
+    done = tk.Toplevel(root)
+    done.title("Done")
+
+    summary = (
         "Encryption complete!\n\n"
         f"Saved password list to:\n{log_path}\n\n"
         f"Summary:\n"
         f"- Encrypted: {success_count}\n"
         f"- Skipped (no password): {skipped_count}\n"
-        f"- Errors: {error_count}"
+        f"- Errors: {error_count}\n"
     )
+    tk.Label(done, text=summary, justify="left").pack(anchor="w", padx=12, pady=(12, 8))
+
+    # Donation copy (EN + ID)
+    donate_text_en = (
+        "This tool is free to use. If you found it helpful and want to support the creator "
+        "(so he can grab some coffee ☕ and help his parents ❤️), you can donate here:"
+    )
+    donate_text_id = (
+        "Alat ini gratis tis tis. Kalau kamu merasa terbantu dan ingin traktir pembuatnya "
+        "biar bisa jajan ☕ sekaligus bantu orang tua ❤️, silakan donasi di sini:"
+    )
+
+    # English copy first
+    tk.Label(done, text=donate_text_en, wraplength=520, justify="left").pack(anchor="w", padx=12, pady=(4, 2))
+
+    # PayPal button
+    def open_paypal():
+        webbrowser.open("https://paypal.me/wendyanjasmara", new=2)
+    tk.Button(done, text="☕ Donate via PayPal", width=24, command=open_paypal).pack(anchor="w", padx=12, pady=2)
+
+    # Indonesian copy after PayPal
+    tk.Label(done, text=donate_text_id, wraplength=520, justify="left").pack(anchor="w", padx=12, pady=(8, 2))
+
+    # Saweria button
+    def open_saweria():
+        webbrowser.open("https://saweria.co/siapahayoo13", new=2)
+    tk.Button(done, text="🍵 Donasi via Saweria", width=24, command=open_saweria).pack(anchor="w", padx=12, pady=2)
+
+    # Close button
+    tk.Button(done, text="Close", width=12, command=done.destroy).pack(pady=(12, 12))
+
+    done.grab_set()
+    root.wait_window(done)
+
 
 if __name__ == "__main__":
     main()
